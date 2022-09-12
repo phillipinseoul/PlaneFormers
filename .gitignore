@@ -1,0 +1,8 @@
+test_imgs
+output/*
+pred_files/*
+models/*
+SparsePlanes/*
+
+*/__pycache__
+planeformers.egg-info
