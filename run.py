@@ -5,6 +5,7 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument( "--imgs",  nargs="*",  type=str, help='List of images for inference')
+parser.add_argument( "--poses", nargs="*", type=str, help='List of camera poses for inference')
 parser.add_argument( "--output", type=str, default='output.pkl', help='Output file name')
 args = parser.parse_args()
 
@@ -14,7 +15,7 @@ ckpt = "./models/planeformers_eccv.pt"
 mv_inference = MultiViewInference(params, ckpt)
 
 # making predictions
-preds = mv_inference.inference(args.imgs)
+preds = mv_inference.inference(args.imgs, args.poses)
 
 viz_info = {}
 viz_info['preds'] = preds

@@ -1,4 +1,7 @@
 from planeformers.utils.misc import *
+import numpy as np
+import torch
+from pytorch3d import transforms
 
 class MultiViewInference:
 
@@ -159,9 +162,10 @@ class MultiViewInference:
 
 
     @torch.no_grad()
-    def run_model_pairwise(self, num_images, edges, features, device='cuda'):
+    def run_model_pairwise(self, num_images, pose_paths, edges, features, device='cuda'):
         edge_cameras = []
         edge_preds = []
+        
         for i in range(len(edges)):
 
             edge = edges[i, :]
@@ -172,53 +176,55 @@ class MultiViewInference:
             best_camera_corr_score = -1
             best_rot_idx = -1
             best_trans_idx = -1
-            for j in range(self.params.camera_search_len): 
-                rot_idx = top_rot_idx[j].cpu().numpy()
-                for k in range(self.params.camera_search_len):
-                    trans_idx = top_trans_idx[k].cpu().numpy()
 
-                    cam_rot = self.kmeans_rot.cluster_centers_[rot_idx, :]
-                    cam_trans = self.kmeans_trans.cluster_centers_[trans_idx, :]
+            # TODO: suppose the ground truth camera poses are given, instead of predicting them
+            # This is implemented only for TWO images.
+            views = []
 
-                    camera_info_view1 = {}
-                    camera_info_view1['rotation'] = quaternion.quaternion(cam_rot[0], cam_rot[1], cam_rot[2], cam_rot[3])
-                    camera_info_view1['position'] = cam_trans.reshape((1, 3))
-                    view_1 = self.process_features(features[str(edge[0])], camera_info_view1)
+            for j in range(num_images):
+                # load camera pose matrix
+                gt_pose = np.loadtxt(pose_paths[i])
+                gt_pose = torch.Tensor(gt_pose)
 
-                    # reference view for planeformer
-                    camera_info_view2 = {}
-                    camera_info_view2['rotation'] = quaternion.quaternion(1, 0, 0, 0)
-                    camera_info_view2['position'] = np.zeros((1, 3))
-                    view_2 = self.process_features(features[str(edge[1])], camera_info_view2)
+                # convert 3x3 rotation matrix to quaternion
+                rot_3x3 = gt_pose[:3, :3]                                       # 3x3 rotation matrix
+                rot_quat = transforms.matrix_to_quaternion(rot_3x3)             # quaternion
+                rot_quat = np.asarray(rot_quat)
+                trans = np.asarray(gt_pose[:3, 3])
 
+                camera_info_view = {}
+                camera_info_view['rotation'] = quaternion.quaternion(rot_quat[0], rot_quat[1], rot_quat[2], rot_quat[3])
+                camera_info_view['position'] = trans
 
-                    model_input = {}
-                    model_input['emb'] = torch.cat([view_1['emb'], view_2['emb']], dim=0).unsqueeze(0).to(torch.float).to(device)
-                    model_input['num_planes'] = torch.tensor([view_1['emb'].shape[0], view_2['emb'].shape[0]]).unsqueeze(0).to(torch.long).to(device)
+                view_features = self.process_features(features[str(edge[j])], camera_info_view)
+                views.append(view_features)
 
-                    model_preds = self.transformer_model(model_input, None)
+            model_input = {}
+            model_input['emb'] = torch.cat([
+                views[0]['emb'],
+                views[1]['emb']
+            ], dim=0).unsqueeze(0).to(torch.float).to(device)
 
-                    if model_preds['camera_corr'][0] > best_camera_corr_score:
-                        best_camera_corr_score = model_preds['camera_corr'][0]
-                        best_pred = model_preds 
-                        best_rot_idx = rot_idx
-                        best_trans_idx = trans_idx
+            model_input['num_planes'] = torch.tensor([
+                views[0]['emb'].shape[0],
+                views[1]['emb'].shape[0]
+            ]).unsqueeze(0).to(torch.long).to(device)
 
-            
+            model_preds = self.transformer_model(model_input, None)
 
-            # finding best camera according to camera corr head
-            pred_camera_rot = np.array(self.kmeans_rot.cluster_centers_[best_rot_idx, :])
-            pred_camera_trans = np.array(self.kmeans_trans.cluster_centers_[best_trans_idx, :])
-
-            pred_camera_rot += best_pred['rot_residual'][0, :].cpu().numpy()
-            pred_camera_trans += best_pred['trans_residual'][0, :].cpu().numpy()
+            best_camera_corr_score = model_preds['camera_corr'][0]
+            best_pred = model_preds 
+            best_rot_idx = 0
+            best_trans_idx = 0
 
             # ensuring camera rot is a unit quaternion
-            pred_camera_rot /= np.linalg.norm(pred_camera_rot)
+            # pred_camera_rot /= np.linalg.norm(pred_camera_rot)
+            rot_quat /= np.linalg.norm(rot_quat)
 
             updated_camera = {}
-            updated_camera['rotation'] = quaternion.quaternion(pred_camera_rot[0], pred_camera_rot[1], pred_camera_rot[2], pred_camera_rot[3])
-            updated_camera['position'] = pred_camera_trans.reshape((1, 3))
+            updated_camera['rotation'] = quaternion.quaternion(rot_quat[0], rot_quat[1], rot_quat[2], rot_quat[3])
+            updated_camera['position'] = trans
+            # pred_camera_trans.reshape((1, 3))
 
             edge_cameras.append(updated_camera)
             edge_preds.append(best_pred)
@@ -364,7 +370,7 @@ class MultiViewInference:
 
     # list of img paths
     @torch.no_grad()
-    def inference(self, img_paths):
+    def inference(self, img_paths, pose_paths):
 
         num_images = len(img_paths)
         
@@ -373,7 +379,8 @@ class MultiViewInference:
         edges = self.build_connectivity_graph(features)
 
         # step 2: running model on each edge of graph to get camera guess
-        edge_cameras, edge_preds = self.run_model_pairwise(num_images, edges, features, device=self.device)
+        # TODO: pass the path for GT camera poses to run_model_pairwise()
+        edge_cameras, edge_preds = self.run_model_pairwise(num_images, pose_paths, edges, features, device=self.device)
 
         # step 3: chaining cameras
         chained_cameras = self.chain_cameras_wrapper(num_images, edges, edge_cameras, features, device=self.device)

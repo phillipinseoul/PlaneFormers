@@ -336,6 +336,10 @@ class PlaneFormerInferenceVisualization():
             centroids[str(i)] = np.array(centroids[str(i)])
 
         for pair in combinations(np.arange(self.num_view), 2):
+            
+            print("##########################")
+            print(assignment)
+
             pred_corr_list =  np.array(assignment)[:, [pair[0], pair[1]]]
             pred_corr_list_filtered = []
             for corr in pred_corr_list:
