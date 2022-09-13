@@ -210,6 +210,8 @@ class MultiViewInference:
             pred_camera_rot = np.array(self.kmeans_rot.cluster_centers_[best_rot_idx, :])
             pred_camera_trans = np.array(self.kmeans_trans.cluster_centers_[best_trans_idx, :])
 
+            print(f'###### pred_camera_trans: {pred_camera_trans} ######')
+
             pred_camera_rot += best_pred['rot_residual'][0, :].cpu().numpy()
             pred_camera_trans += best_pred['trans_residual'][0, :].cpu().numpy()
 
