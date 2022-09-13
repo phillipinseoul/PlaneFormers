@@ -221,6 +221,8 @@ class MultiViewInference:
             # pred_camera_rot /= np.linalg.norm(pred_camera_rot)
             rot_quat /= np.linalg.norm(rot_quat)
 
+            print(f'###### trans: {trans} ######')
+
             updated_camera = {}
             updated_camera['rotation'] = quaternion.quaternion(rot_quat[0], rot_quat[1], rot_quat[2], rot_quat[3])
             updated_camera['position'] = trans
