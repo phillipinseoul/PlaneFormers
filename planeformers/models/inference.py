@@ -181,6 +181,18 @@ class MultiViewInference:
             # This is implemented only for TWO images.
             views = []
 
+            ############ TEST ############
+            target_pose = np.loadtxt(pose_paths[0])
+            ref_pose = np.loadtxt(pose_paths[1])
+
+            target_pose = torch.Tensor(target_pose)
+            ref_pose = torch.Tensor(ref_pose)
+
+            rel_pose = get_relative_camera_pose(target_pose, ref_pose)
+            print(f'rel_pose: {rel_pose}')
+            ############ TEST ############
+
+
             for j in range(num_images):
                 # load camera pose matrix
                 gt_pose = np.loadtxt(pose_paths[i])
@@ -193,8 +205,22 @@ class MultiViewInference:
                 trans = np.asarray(gt_pose[:3, 3])
 
                 camera_info_view = {}
-                camera_info_view['rotation'] = quaternion.quaternion(rot_quat[0], rot_quat[1], rot_quat[2], rot_quat[3])
-                camera_info_view['position'] = trans
+                
+                if j == 0:
+                    '''
+                    camera_info_view['rotation'] = quaternion.quaternion(rot_quat[0], rot_quat[1], rot_quat[2], rot_quat[3])
+                    camera_info_view['position'] = trans
+                    '''
+                    rot_quat = rel_pose['rotation']
+                    camera_info_view['rotation'] = quaternion.quaternion(rot_quat[0], rot_quat[1], rot_quat[2], rot_quat[3])
+                    camera_info_view['position'] = np.asarray(rel_pose['position']).reshape((1, 3))
+                    ############ TEST ############
+                    print(f'rotation: {camera_info_view}')
+
+                    ############ TEST ############
+                else: 
+                    camera_info_view['rotation'] = quaternion.quaternion(1, 0, 0, 0)
+                    camera_info_view['position'] = np.zeros((1, 3))
 
                 view_features = self.process_features(features[str(edge[j])], camera_info_view)
                 views.append(view_features)
@@ -221,11 +247,13 @@ class MultiViewInference:
             # pred_camera_rot /= np.linalg.norm(pred_camera_rot)
             rot_quat /= np.linalg.norm(rot_quat)
 
-            print(f'###### trans: {trans} ######')
+            print(f'###### trans: {np.asarray(rel_pose)} ######')
 
             updated_camera = {}
             updated_camera['rotation'] = quaternion.quaternion(rot_quat[0], rot_quat[1], rot_quat[2], rot_quat[3])
-            updated_camera['position'] = trans
+            updated_camera['position'] = np.asarray(rel_pose['position'])
+            # updated_camera['rotation'] = quaternion.quaternion(rot_quat[0], rot_quat[1], rot_quat[2], rot_quat[3])
+            # updated_camera['position'] = trans
             # pred_camera_trans.reshape((1, 3))
 
             edge_cameras.append(updated_camera)
@@ -391,3 +419,41 @@ class MultiViewInference:
         merged_planes, _ = self.merge_planes(num_images, edges, self.params.plane_corr_threshold, edge_preds, features)
 
         return features, chained_cameras, None, merged_planes
+
+
+def get_relative_camera_pose(target_pose, ref_pose):
+    '''
+    inputs
+        - target_pose: 4x4 camera matrix
+        - ref_pose: 4x4 camera matrix
+    output:
+        - rel_pose: 4x4 camera matrix
+    '''
+    target_rot = target_pose[:3, :3]
+    target_rot_quat = transforms.matrix_to_quaternion(target_rot)
+    target_rot_quat = np.asarray(target_rot_quat)
+    target_rot_quat = quaternion.quaternion(
+        target_rot_quat[0], target_rot_quat[1], target_rot_quat[2], target_rot_quat[3]
+    )
+    target_trans = target_pose[:3, 3]
+
+    ref_rot = ref_pose[:3, :3]
+    ref_rot_quat = transforms.matrix_to_quaternion(ref_rot)
+    ref_rot_quat = np.asarray(ref_rot_quat)
+    ref_rot_quat = quaternion.quaternion(
+        ref_rot_quat[0], ref_rot_quat[1], ref_rot_quat[2], ref_rot_quat[3]
+    )
+    ref_trans = ref_pose[:3, 3]
+
+    rel_rot = (ref_rot_quat.inverse() * target_rot_quat)
+    rel_trans = get_relative_T_in_cam2_ref(
+        quaternion.as_rotation_matrix(ref_rot_quat.inverse()),
+        target_trans,
+        ref_trans
+    )
+    rel_rot = quaternion.as_float_array(rel_rot).tolist()
+    rel_trans = rel_trans.tolist()
+
+    rel_pose = {'position': rel_trans, 'rotation': rel_rot}
+
+    return rel_pose
