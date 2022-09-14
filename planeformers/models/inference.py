@@ -169,55 +169,25 @@ class MultiViewInference:
         for i in range(len(edges)):
 
             edge = edges[i, :]
-
-            _, top_rot_idx = torch.topk(features['pred_camera']['rot_logits'][edge[0] * num_images + edge[1], :].reshape(-1), 32)
-            _, top_trans_idx = torch.topk(features['pred_camera']['tran_logits'][edge[0] * num_images + edge[1], :].reshape(-1), 32)
-
-            best_camera_corr_score = -1
-            best_rot_idx = -1
-            best_trans_idx = -1
-
             # TODO: suppose the ground truth camera poses are given, instead of predicting them
             # This is implemented only for TWO images.
             views = []
 
-            ############ TEST ############
             target_pose = np.loadtxt(pose_paths[0])
             ref_pose = np.loadtxt(pose_paths[1])
 
-            target_pose = torch.Tensor(target_pose)
-            ref_pose = torch.Tensor(ref_pose)
-
-            rel_pose = get_relative_camera_pose(target_pose, ref_pose)
-            print(f'rel_pose: {rel_pose}')
-            ############ TEST ############
-
+            rel_pose = get_relative_camera_pose(
+                torch.Tensor(target_pose), 
+                torch.Tensor(ref_pose)
+            )
 
             for j in range(num_images):
-                # load camera pose matrix
-                gt_pose = np.loadtxt(pose_paths[i])
-                gt_pose = torch.Tensor(gt_pose)
-
-                # convert 3x3 rotation matrix to quaternion
-                rot_3x3 = gt_pose[:3, :3]                                       # 3x3 rotation matrix
-                rot_quat = transforms.matrix_to_quaternion(rot_3x3)             # quaternion
-                rot_quat = np.asarray(rot_quat)
-                trans = np.asarray(gt_pose[:3, 3])
-
                 camera_info_view = {}
                 
                 if j == 0:
-                    '''
-                    camera_info_view['rotation'] = quaternion.quaternion(rot_quat[0], rot_quat[1], rot_quat[2], rot_quat[3])
-                    camera_info_view['position'] = trans
-                    '''
                     rot_quat = rel_pose['rotation']
                     camera_info_view['rotation'] = quaternion.quaternion(rot_quat[0], rot_quat[1], rot_quat[2], rot_quat[3])
                     camera_info_view['position'] = np.asarray(rel_pose['position']).reshape((1, 3))
-                    ############ TEST ############
-                    print(f'rotation: {camera_info_view}')
-
-                    ############ TEST ############
                 else: 
                     camera_info_view['rotation'] = quaternion.quaternion(1, 0, 0, 0)
                     camera_info_view['position'] = np.zeros((1, 3))
@@ -237,24 +207,14 @@ class MultiViewInference:
             ]).unsqueeze(0).to(torch.long).to(device)
 
             model_preds = self.transformer_model(model_input, None)
-
-            best_camera_corr_score = model_preds['camera_corr'][0]
-            best_pred = model_preds 
-            best_rot_idx = 0
-            best_trans_idx = 0
+            best_pred = model_preds
 
             # ensuring camera rot is a unit quaternion
-            # pred_camera_rot /= np.linalg.norm(pred_camera_rot)
             rot_quat /= np.linalg.norm(rot_quat)
-
-            print(f'###### trans: {np.asarray(rel_pose)} ######')
 
             updated_camera = {}
             updated_camera['rotation'] = quaternion.quaternion(rot_quat[0], rot_quat[1], rot_quat[2], rot_quat[3])
             updated_camera['position'] = np.asarray(rel_pose['position'])
-            # updated_camera['rotation'] = quaternion.quaternion(rot_quat[0], rot_quat[1], rot_quat[2], rot_quat[3])
-            # updated_camera['position'] = trans
-            # pred_camera_trans.reshape((1, 3))
 
             edge_cameras.append(updated_camera)
             edge_preds.append(best_pred)
@@ -309,28 +269,24 @@ class MultiViewInference:
     @torch.no_grad()
     def chain_cameras(self, num_images, edges, edge_cameras, adj_mat):
 
+        chained_cameras = []
         # chaining cameras (assuming view 0 is reference view)
         chained_cameras = [{'rotation': quaternion.quaternion(1, 0, 0, 0), 'position': np.zeros((1, 3))}]
 
         for i in range(1, num_images):
-            path = self.bfs(adj_mat, init_vertex=i, dest_vertex=0)
+            cam = edge_cameras[0]
 
             init_rot = np.eye(3)
             init_trans = np.zeros((3, 1))
 
-            for j in range(len(path) - 1):
-                idx, is_reversed = self.lookup_edge_idx(path[j], path[j + 1], edges)
+            rot = cam['rotation']
+            trans = cam['position'].reshape((3, 1))
 
-                rot = edge_cameras[abs(idx)]['rotation']
-                trans = edge_cameras[abs(idx)]['position'].reshape((3, 1))
+            init_rot = quaternion.as_rotation_matrix(rot)@init_rot
+            init_trans = quaternion.as_rotation_matrix(rot)@init_trans + trans
+            # init_rot = quaternion.as_rotation_matrix(rot).T@init_rot
+            # init_trans = (quaternion.as_rotation_matrix(rot).T@(init_trans - trans))
 
-                if not is_reversed:
-                    init_rot = quaternion.as_rotation_matrix(rot)@init_rot
-                    init_trans = quaternion.as_rotation_matrix(rot)@init_trans + trans
-                else:
-                    init_rot = quaternion.as_rotation_matrix(rot).T@init_rot
-                    init_trans = (quaternion.as_rotation_matrix(rot).T@(init_trans - trans))
-            
             chained_camera_dict = {}
             chained_camera_dict['rotation'] = quaternion.from_rotation_matrix(init_rot)
             chained_camera_dict['position'] = init_trans.reshape((1, 3))
@@ -446,8 +402,10 @@ def get_relative_camera_pose(target_pose, ref_pose):
     ref_trans = ref_pose[:3, 3]
 
     rel_rot = (ref_rot_quat.inverse() * target_rot_quat)
+    
     rel_trans = get_relative_T_in_cam2_ref(
         quaternion.as_rotation_matrix(ref_rot_quat.inverse()),
+        # np.linalg.inv(ref_rot),
         target_trans,
         ref_trans
     )
