@@ -287,18 +287,12 @@ class MultiViewInference:
 
             init_rot = quaternion.as_rotation_matrix(rot)@init_rot
             init_trans = quaternion.as_rotation_matrix(rot)@init_trans + trans
-            # init_rot = quaternion.as_rotation_matrix(rot).T@init_rot
-            # init_trans = (quaternion.as_rotation_matrix(rot).T@(init_trans - trans))
 
             chained_camera_dict = {}
             chained_camera_dict['rotation'] = quaternion.from_rotation_matrix(init_rot)
             chained_camera_dict['position'] = init_trans.reshape((1, 3))
 
             chained_cameras.append(chained_camera_dict)
-
-        print('###############################')
-        print(f'chained_cameras: {chained_cameras}')
-        print('###############################')
 
         return chained_cameras
 
@@ -360,7 +354,6 @@ class MultiViewInference:
         return merged_planes, plane_list
 
 
-
     # list of img paths
     @torch.no_grad()
     def inference(self, img_paths, pose_paths):
@@ -387,23 +380,21 @@ class MultiViewInference:
 def get_relative_camera_pose(target_pose, ref_pose):
     
     target_rot = target_pose[:3, :3]
-    target_rot_q = transforms.matrix_to_quaternion(torch.Tensor(target_rot))
-    target_rot_q = np.asarray(target_rot_q)
-    target_rot_q = quaternion.from_float_array(target_rot_q)
-
     ref_rot = ref_pose[:3, :3]
-    ref_rot_q = transforms.matrix_to_quaternion(torch.Tensor(ref_rot))
-    ref_rot_q = np.asarray(ref_rot_q)
-    ref_rot_q = quaternion.from_float_array(ref_rot_q)
+
+    target_rot_q = quaternion.from_rotation_matrix(target_rot)
+    ref_rot_q = quaternion.from_rotation_matrix(ref_rot)
 
     target_trans = target_pose[:3, 3]
     ref_trans = ref_pose[:3, 3]
 
+    # compute relative rotation matrix
     rel_rot = (ref_rot_q.inverse() * target_rot_q)
-    rel_trans = get_relative_T_in_cam2_ref(
-        quaternion.as_rotation_matrix(ref_rot_q.inverse()),
-        target_trans,
-        ref_trans
+
+    # compute relative translation matrix
+    rel_trans = np.dot(
+        np.linalg.inv(ref_rot),
+        ref_trans - target_trans
     )
     
     rel_rot = quaternion.as_float_array(rel_rot).tolist()
