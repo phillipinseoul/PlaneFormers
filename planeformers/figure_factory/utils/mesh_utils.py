@@ -334,6 +334,7 @@ def get_camera_meshes(camera_list, radius=0.02):
     verts_list = []
     faces_list = []
     color_list = []
+    
     rots = np.array(
         [
             quaternion.as_rotation_matrix(camera_info["rotation"])
@@ -356,6 +357,7 @@ def get_camera_meshes(camera_list, radius=0.02):
         [198/255, 120/255, 221/255],
     ][:len(camera_list)]
     assert len(predetermined_color) == len(camera_list)
+    
     for idx, (position, lookat, vertical, color) in enumerate(
         zip(positions, lookats, verticals, predetermined_color)
     ):
@@ -373,6 +375,7 @@ def get_camera_meshes(camera_list, radius=0.02):
             cur_num_verts += len(cyl_verts)
             cam_verts.extend(cyl_verts)
             cam_inds.extend(cyl_ind)
+        
         # Create a textures object
         verts_list.append(torch.tensor(cam_verts, dtype=torch.float32))
         faces_list.append(torch.tensor(cam_inds, dtype=torch.float32))

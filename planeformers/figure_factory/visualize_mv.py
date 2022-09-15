@@ -231,6 +231,10 @@ class PlaneFormerMVResult():
 
             height, width, _ = img.shape
             vis = Visualizer(img)
+
+            camera_info = pred_camera[i]
+
+            '''
             if tran_topk == -2 and rot_topk == -2:
                 camera_info = pred_camera[i]
             elif tran_topk == -1 and rot_topk == -1:
@@ -240,13 +244,15 @@ class PlaneFormerMVResult():
                 camera_info['position'] = np.array(camera_info['position'])
             else:
                 raise NotImplementedError
+            '''
+            
             if not gt_plane or not gt_segm:
                 p_instance = p_instances[str(i)]            
             plane_params = plane_locals[str(i)]
             if gt_segm:
                 seg_blended = get_gt_labeled_seg(self.dataset_dict[idx][str(i)], vis, paper_img=True)
                 segmentations = [ann['segmentation'] for ann in self.dataset_dict[idx][str(i)]['annotations']]
-                #cv2.imwrite(os.path.join(output_dir, prefix + f'_{i}_gtseg.png'), seg_blended)
+                # cv2.imwrite(os.path.join(output_dir, prefix + f'_{i}_gtseg.png'), seg_blended)
             else:
                 seg_blended = get_labeled_seg(p_instance, 0.7, vis, paper_img=True)
                 segmentations = p_instance.pred_masks
@@ -264,8 +270,10 @@ class PlaneFormerMVResult():
                 # valid = (np.linalg.norm(plane_params, axis=1))>0.2
                 # plane_params = plane_params[valid]
                 # segmentations = np.array(segmentations)[valid].tolist()
+
             meshes, uv_map = get_single_image_mesh_plane(plane_params, segmentations, img_file=img_file, 
                             height=height, width=width, webvis=False, tolerance=0)
+
             uv_maps.extend(uv_map)
             meshes = transform_meshes(meshes, camera_info)
             meshes_list.append(meshes)
@@ -339,6 +347,7 @@ class PlaneFormerInferenceVisualization():
             
             print("##########################")
             print(assignment)
+            print("##########################")
 
             pred_corr_list =  np.array(assignment)[:, [pair[0], pair[1]]]
             pred_corr_list_filtered = []
@@ -422,6 +431,11 @@ class PlaneFormerInferenceVisualization():
 
         # add camera into the mesh
         if show_camera:
+            
+            print('##############################')
+            print(f'CAMERA_LIST: {cam_list}')
+            print('##############################')
+
             cam_meshes = get_camera_meshes(cam_list)
             if webvis:
                 cam_meshes = rotate_mesh_for_webview(cam_meshes)
