@@ -162,7 +162,7 @@ class MultiViewInference:
 
 
     @torch.no_grad()
-    def run_model_pairwise(self, num_images, pose_paths, edges, features, device='cuda'):
+    def run_model_pairwise(self, num_images, poses, edges, features, device='cuda'):
         edge_cameras = []
         edge_preds = []
         
@@ -173,8 +173,8 @@ class MultiViewInference:
             # This is implemented only for TWO images.
             views = []
 
-            target_pose = np.loadtxt(pose_paths[0])
-            ref_pose = np.loadtxt(pose_paths[1])
+            target_pose = poses[0]      # np.loadtxt(pose_paths[0])
+            ref_pose = poses[1]         # np.loadtxt(pose_paths[1])
 
             rel_pose = get_relative_camera_pose(
                 target_pose, 
@@ -366,7 +366,35 @@ class MultiViewInference:
 
         # step 2: running model on each edge of graph to get camera guess
         # TODO: pass the path for GT camera poses to run_model_pairwise()
-        edge_cameras, edge_preds = self.run_model_pairwise(num_images, pose_paths, edges, features, device=self.device)
+        poses = []
+        for pose_path in pose_paths:
+            pose = np.loadtxt(pose_path)
+            poses.append(pose)
+
+        edge_cameras, edge_preds = self.run_model_pairwise(num_images, poses, edges, features, device=self.device)
+
+        # step 3: chaining cameras
+        chained_cameras = self.chain_cameras_wrapper(num_images, edges, edge_cameras, features, device=self.device)
+
+        # step 4: merging planes
+        merged_planes, _ = self.merge_planes(num_images, edges, self.params.plane_corr_threshold, edge_preds, features)
+
+        return features, chained_cameras, None, merged_planes
+
+    
+    # a second version of inference() - for experiments with given poses
+    @torch.no_grad()
+    def inference_with_poses(self, img_paths, poses):
+
+        num_images = len(img_paths)
+        
+        # step 1: extracing features from images and building min spanning tree
+        features = self.predict_features(img_paths)
+        edges = self.build_connectivity_graph(features)
+
+        # step 2: running model on each edge of graph to get camera guess
+        # TODO: pass the path for GT camera poses to run_model_pairwise()
+        edge_cameras, edge_preds = self.run_model_pairwise(num_images, poses, edges, features, device=self.device)
 
         # step 3: chaining cameras
         chained_cameras = self.chain_cameras_wrapper(num_images, edges, edge_cameras, features, device=self.device)
@@ -392,10 +420,19 @@ def get_relative_camera_pose(target_pose, ref_pose):
     rel_rot = (ref_rot_q.inverse() * target_rot_q)
 
     # compute relative translation matrix
+    '''
     rel_trans = np.dot(
         np.linalg.inv(ref_rot),
         ref_trans - target_trans
     )
+    '''
+    rel_trans = get_relative_T_in_cam2_ref(
+        quaternion.as_rotation_matrix(ref_rot_q.inverse()),
+        target_trans,
+        ref_trans
+    )
+
+
     
     rel_rot = quaternion.as_float_array(rel_rot).tolist()
     rel_trans = rel_trans.tolist()
