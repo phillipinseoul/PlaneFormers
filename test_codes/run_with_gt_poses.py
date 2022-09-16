@@ -31,7 +31,7 @@ for idx, pairs in tqdm(image_pairs.items()):
         imgs.append(join(RGB_IMAGE_DIR, scene_id, img['image_name']))
         
         # make the camera pose matrix (4x4)
-        rot_q = -np.array(img['camera']['rotation'])                                # quaternion
+        rot_q = np.array(img['camera']['rotation'])                                # quaternion
         rot_q = quaternion.quaternion(rot_q[0], rot_q[1], rot_q[2], rot_q[3])
         rot_3x3 = quaternion.as_rotation_matrix(rot_q)                             # rotation: 3 x 3
         position = np.array(img['camera']['position'])
