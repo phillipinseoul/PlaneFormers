@@ -408,6 +408,11 @@ class PlaneFormerInferenceVisualization():
             meshes, uv_map = get_single_image_mesh_plane(plane_params, segmentations, img_file=img_file, 
                             height=height, width=width, webvis=False, tolerance=0)
             uv_maps.extend(uv_map)
+
+            print('############## SAVE MESHES FROM EACH VIEWPOINT ##############')
+            prefix_ = str(i) + '_viewpoint'
+            save_obj(folder=output_dir, prefix=prefix_, meshes=meshes, decimal_places=10, blend_flag=True, map_files=None, uv_maps=uv_map)
+
             meshes = transform_meshes(meshes, camera_info)
             meshes_list.append(meshes)
             cam_list.append(camera_info)

@@ -1,6 +1,7 @@
 output/
 models/
 test_images/
+test_codes/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
