@@ -9,7 +9,7 @@ from os.path import join
 
 IMAGE_PAIRS_PATH = '../matterport/dataset/mp3d_planercnn_json/image_pairs_info.json'
 RGB_IMAGE_DIR = '../matterport/dataset/rgb'
-SAVE_DIR = 'output/pred_files/with_poses/0916'
+SAVE_DIR = 'output/pred_files/with_poses/0921'
 
 parser = argparse.ArgumentParser()
 parser.add_argument( "--pair_id", type=str, help='ID of image pairs')
