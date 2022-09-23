@@ -344,11 +344,6 @@ class PlaneFormerInferenceVisualization():
             centroids[str(i)] = np.array(centroids[str(i)])
 
         for pair in combinations(np.arange(self.num_view), 2):
-            
-            print("##########################")
-            print(assignment)
-            print("##########################")
-
             pred_corr_list =  np.array(assignment)[:, [pair[0], pair[1]]]
             pred_corr_list_filtered = []
             for corr in pred_corr_list:
@@ -421,6 +416,11 @@ class PlaneFormerInferenceVisualization():
             meshes, uv_map = get_single_image_mesh_plane(plane_params, segmentations, img_file=img_file, 
                             height=height, width=width, webvis=False, tolerance=0)
             uv_maps.extend(uv_map)
+
+            print('############## SAVE MESHES FROM EACH VIEWPOINT ##############')
+            prefix_ = str(i) + '_viewpoint'
+            save_obj(folder=output_dir, prefix=prefix_, meshes=meshes, decimal_places=10, blend_flag=True, map_files=None, uv_maps=uv_map)
+
             meshes = transform_meshes(meshes, camera_info)
             meshes_list.append(meshes)
             cam_list.append(camera_info)
@@ -431,11 +431,6 @@ class PlaneFormerInferenceVisualization():
 
         # add camera into the mesh
         if show_camera:
-            
-            print('##############################')
-            print(f'CAMERA_LIST: {cam_list}')
-            print('##############################')
-
             cam_meshes = get_camera_meshes(cam_list)
             if webvis:
                 cam_meshes = rotate_mesh_for_webview(cam_meshes)
