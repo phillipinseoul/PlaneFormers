@@ -49,8 +49,14 @@ def merge_plane_params_from_global_params(plane_globals, corr_list):
     for key in plane_globals.keys():
         pred[key]['offset'] = np.maximum(np.linalg.norm(plane_globals[key], ord=2, axis=1), 1e-5).reshape(-1,1)
         pred[key]['normal'] = plane_globals[key] / pred[key]['offset']
+
+    print('####################################')
+    print(f'corr_list: {corr_list}')
+    print('####################################')
+    
     for ann_id in corr_list:
         assert len(ann_id) == len(plane_globals.keys())
+
         # average normal
         normal_list = []
         offset_list = []
@@ -60,7 +66,13 @@ def merge_plane_params_from_global_params(plane_globals, corr_list):
                 offset_list.append(pred[str(view_id)]['offset'][plane_id])
         normal_list = np.vstack(normal_list)
         w, v = eigh(normal_list.T@normal_list)
+        
         avg_normals = v[:,np.argmax(w)]
+        
+        print('####################################')
+        print(f'normal_list: {normal_list}')
+        print('####################################')
+
         if (avg_normals@normal_list.T).sum() < 0:
             avg_normals = - avg_normals
         
